@@ -1,8 +1,12 @@
 """
-Custom telemetry and visualization widgets for the 2-Axis Light Tracker GUI:
-1. Radar2D: 2D Pan/Tilt Compass & Crosshair with motion trail and virtual sun drag
-2. TimeSeriesChart: Real-time scrolling oscilloscope chart (PWM µs / Angle ° / Counts)
+Custom monochrome telemetry and visualization widgets for the 2-Axis Light Tracker GUI:
+1. Radar2D: 2D Pan/Tilt Compass & Crosshair in pure black, white & layered greys
+2. TimeSeriesChart: Real-time scrolling oscilloscope chart (White X trace, Grey Y trace)
 3. ProtocolInspector: Live [0xFF, pulso_x, pulso_y] byte-frame breakdown & UART echo log
+
+Typography:
+- UI Headers & Labels: Bahnschrift (DIN-1451 industrial sans-serif)
+- Numeric Telemetry, Hex Frames & Terminal Log: Cascadia Mono
 """
 
 from __future__ import annotations
@@ -26,10 +30,13 @@ from serial_protocol import (
     counts_to_us,
 )
 
+FONT_UI = "Bahnschrift"
+FONT_MONO = "Cascadia Mono"
+
 
 class Radar2D(tk.Frame):
     """
-    2D Pan/Tilt Compass & Reticle canvas.
+    Monochrome 2D Pan/Tilt Compass & Reticle canvas.
     Maps X-axis [1..251] -> West (0°) to East (180°)
          Y-axis [1..251] -> South (0°) to North (180°)
     In Simulator mode, clicking/dragging moves the virtual light source.
@@ -41,7 +48,7 @@ class Radar2D(tk.Frame):
         on_sun_move: Optional[Callable[[float, float], None]] = None,
         **kwargs,
     ) -> None:
-        super().__init__(master, bg="#0F172A", **kwargs)
+        super().__init__(master, bg="#000000", **kwargs)
         self.on_sun_move = on_sun_move
 
         self.pulse_x: int = PULSE_CENTER
@@ -53,9 +60,9 @@ class Radar2D(tk.Frame):
 
         self.canvas = tk.Canvas(
             self,
-            bg="#0F172A",
+            bg="#000000",
             highlightthickness=1,
-            highlightbackground="#1E293B",
+            highlightbackground="#26262B",
             cursor="crosshair",
         )
         self.canvas.pack(fill=tk.BOTH, expand=True)
@@ -103,8 +110,8 @@ class Radar2D(tk.Frame):
         w = self.canvas.winfo_width()
         h = self.canvas.winfo_height()
         cx = w * 0.5
-        cy = h * 0.53
-        radius = max(20.0, min(w, h) * 0.37)
+        cy = h * 0.55
+        radius = max(20.0, min(w, h) * 0.36)
         sx, sy = self._canvas_to_counts(event.x, event.y, cx, cy, radius)
         self.on_sun_move(sx, sy)
 
@@ -116,18 +123,8 @@ class Radar2D(tk.Frame):
         self.canvas.delete("all")
 
         cx = w * 0.5
-        cy = h * 0.53
-        radius = max(20.0, min(w, h) * 0.37)
-
-        # Header
-        self.canvas.create_text(
-            12,
-            10,
-            anchor="nw",
-            text="2D Pan/Tilt Compass Radar (N/S/E/W)",
-            fill="#E2E8F0",
-            font=("Segoe UI", 10, "bold"),
-        )
+        cy = h * 0.55
+        radius = max(20.0, min(w, h) * 0.36)
 
         # Outer bounding square (full servo workspace [1..251] x [1..251])
         self.canvas.create_rectangle(
@@ -135,8 +132,8 @@ class Radar2D(tk.Frame):
             cy - radius,
             cx + radius,
             cy + radius,
-            outline="#1E293B",
-            fill="#0B1120",
+            outline="#1F1F24",
+            fill="#050507",
             width=1,
         )
 
@@ -148,100 +145,129 @@ class Radar2D(tk.Frame):
                 cy - r,
                 cx + r,
                 cy + r,
-                outline="#1E293B",
+                outline="#27272A" if frac == 1.0 else "#18181C",
                 dash=(3, 3) if frac < 1.0 else (),
                 width=1,
             )
             self.canvas.create_text(
-                cx + 4,
+                cx + 5,
                 cy - r + 8,
                 anchor="nw",
                 text=deg_lbl,
-                fill="#475569",
-                font=("Consolas", 8),
+                fill="#52525B",
+                font=(FONT_MONO, 8),
             )
 
         # Center axes
-        self.canvas.create_line(cx - radius, cy, cx + radius, cy, fill="#334155", width=1)
-        self.canvas.create_line(cx, cy - radius, cx, cy + radius, fill="#334155", width=1)
+        self.canvas.create_line(cx - radius, cy, cx + radius, cy, fill="#27272A", width=1)
+        self.canvas.create_line(cx, cy - radius, cx, cy + radius, fill="#27272A", width=1)
 
         # Cardinal labels
-        self.canvas.create_text(cx, cy - radius - 12, text="N — North (Y=251 / 180°)", fill="#34D399", font=("Segoe UI", 8, "bold"))
-        self.canvas.create_text(cx, cy + radius + 12, text="S — South (Y=1 / 0°)", fill="#F87171", font=("Segoe UI", 8, "bold"))
-        self.canvas.create_text(cx + radius + 8, cy, anchor="w", text="E\n180°", fill="#38BDF8", font=("Segoe UI", 8, "bold"))
-        self.canvas.create_text(cx - radius - 8, cy, anchor="e", text="W\n0°", fill="#A78BFA", font=("Segoe UI", 8, "bold"))
+        self.canvas.create_text(cx, cy - radius - 12, text="N  ·  NORTH (180°)", fill="#FFFFFF", font=(FONT_UI, 9, "bold"))
+        self.canvas.create_text(cx, cy + radius + 12, text="S  ·  SOUTH (0°)", fill="#71717A", font=(FONT_UI, 9, "bold"))
+        self.canvas.create_text(cx + radius + 8, cy, anchor="w", text="E\n180°", fill="#D4D4D8", font=(FONT_UI, 9, "bold"))
+        self.canvas.create_text(cx - radius - 8, cy, anchor="e", text="W\n0°", fill="#71717A", font=(FONT_UI, 9, "bold"))
 
-        # Motion trail
+        # Monochrome gradient motion trail
         if len(self._trail) > 1:
             pts = [self._counts_to_canvas(px, py, cx, cy, radius) for px, py in self._trail]
-            for i in range(len(pts) - 1):
-                alpha = (i + 1) / len(pts)
-                col = "#1D4ED8" if alpha < 0.6 else "#38BDF8"
+            n_seg = len(pts) - 1
+            for i in range(n_seg):
+                alpha = (i + 1) / float(n_seg)
+                if alpha < 0.4:
+                    col, lw = "#27272A", 1.2
+                elif alpha < 0.75:
+                    col, lw = "#52525B", 1.6
+                else:
+                    col, lw = "#A1A1AA", 2.0
                 self.canvas.create_line(
                     pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1],
-                    fill=col, width=1.5 if alpha < 0.6 else 2.2,
+                    fill=col, width=lw,
                 )
 
         # Virtual Sun indicator (when simulator mode is active)
         if self.sun_counts is not None:
             sun_sx, sun_sy = self._counts_to_canvas(self.sun_counts[0], self.sun_counts[1], cx, cy, radius)
             self.canvas.create_oval(
-                sun_sx - 10, sun_sy - 10, sun_sx + 10, sun_sy + 10,
-                outline="#FBBF24", fill="#78350F", width=2,
+                sun_sx - 11, sun_sy - 11, sun_sx + 11, sun_sy + 11,
+                outline="#52525B", fill="#141418", width=1.5,
             )
             self.canvas.create_oval(
                 sun_sx - 4, sun_sy - 4, sun_sx + 4, sun_sy + 4,
-                outline="", fill="#FDE047",
+                outline="", fill="#FFFFFF",
             )
             self.canvas.create_text(
-                sun_sx + 13, sun_sy - 8,
+                sun_sx + 14, sun_sy - 7,
                 anchor="w",
-                text="Virtual Light",
-                fill="#FBBF24",
-                font=("Segoe UI", 8, "bold"),
+                text="LIGHT SOURCE",
+                fill="#A1A1AA",
+                font=(FONT_UI, 9, "bold"),
             )
 
-        # Current Servo Target Reticle
+        # Current Servo Target Reticle (Crisp White)
         tx, ty = self._counts_to_canvas(self.pulse_x, self.pulse_y, cx, cy, radius)
-        self.canvas.create_line(tx, cy, tx, ty, fill="#0284C7", dash=(2, 2))
-        self.canvas.create_line(cx, ty, tx, ty, fill="#D97706", dash=(2, 2))
+        self.canvas.create_line(tx, cy, tx, ty, fill="#3F3F46", dash=(2, 2))
+        self.canvas.create_line(cx, ty, tx, ty, fill="#3F3F46", dash=(2, 2))
 
-        self.canvas.create_oval(tx - 9, ty - 9, tx + 9, ty + 9, outline="#38BDF8", width=2)
-        self.canvas.create_oval(tx - 3, ty - 3, tx + 3, ty + 3, fill="#F8FAFC", outline="")
-        self.canvas.create_line(tx - 14, ty, tx + 14, ty, fill="#38BDF8", width=1.5)
-        self.canvas.create_line(tx, ty - 14, tx, ty + 14, fill="#38BDF8", width=1.5)
+        self.canvas.create_oval(tx - 9, ty - 9, tx + 9, ty + 9, outline="#FFFFFF", width=1.8)
+        self.canvas.create_oval(tx - 2.5, ty - 2.5, tx + 2.5, ty + 2.5, fill="#FFFFFF", outline="")
+        self.canvas.create_line(tx - 15, ty, tx - 5, ty, fill="#FFFFFF", width=1.5)
+        self.canvas.create_line(tx + 5, ty, tx + 15, ty, fill="#FFFFFF", width=1.5)
+        self.canvas.create_line(tx, ty - 15, tx, ty - 5, fill="#FFFFFF", width=1.5)
+        self.canvas.create_line(tx, ty + 5, tx, ty + 15, fill="#FFFFFF", width=1.5)
 
+        # Top-Left Translucent-Style HUD Pill
         deg_x = counts_to_deg(self.pulse_x)
         deg_y = counts_to_deg(self.pulse_y)
+        self.canvas.create_rectangle(
+            10, 10, 290, 54,
+            fill="#0C0C0E", outline="#26262B", width=1,
+        )
         self.canvas.create_text(
-            12,
-            28,
+            20,
+            15,
             anchor="nw",
-            text=f"X: {self.pulse_x:3d} ({deg_x:5.1f}°)   Y: {self.pulse_y:3d} ({deg_y:5.1f}°)",
-            fill="#94A3B8",
-            font=("Consolas", 9),
+            text="2D COMPASS RADAR  ·  N / S / E / W",
+            fill="#FFFFFF",
+            font=(FONT_UI, 10, "bold"),
+        )
+        self.canvas.create_text(
+            20,
+            33,
+            anchor="nw",
+            text=f"X: {self.pulse_x:3d} ({deg_x:5.1f}°)   ·   Y: {self.pulse_y:3d} ({deg_y:5.1f}°)",
+            fill="#A1A1AA",
+            font=(FONT_MONO, 9),
         )
         if self.sun_counts is not None:
             self.canvas.create_text(
-                w - 10,
-                h - 8,
+                w - 12,
+                h - 10,
                 anchor="se",
-                text="Click/Drag on Radar to move Virtual Light",
-                fill="#FBBF24",
-                font=("Segoe UI", 8),
+                text="Click/Drag to position virtual light",
+                fill="#52525B",
+                font=(FONT_UI, 9),
             )
 
 
 class TimeSeriesChart(ctk.CTkFrame):
     """
-    Real-time scrolling dual-trace oscilloscope chart for X and Y servo telemetry.
-    Supports switching between Pulse Width (µs), Servo Angle (°), and Raw Counts.
+    Monochrome real-time scrolling dual-trace oscilloscope chart:
+    - X-Axis rendered in solid White (#FFFFFF)
+    - Y-Axis rendered in medium Grey (#71717A)
     """
 
     WINDOW_SECONDS: float = 15.0
 
     def __init__(self, master: tk.Misc, **kwargs) -> None:
-        super().__init__(master, fg_color="#0F172A", corner_radius=8, **kwargs)
+        super().__init__(
+            master,
+            fg_color="#0C0C0E",
+            border_width=1,
+            border_color="#26262B",
+            corner_radius=10,
+            **kwargs,
+        )
         self.pack_propagate(False)
 
         self._history: Deque[Tuple[float, int, int]] = collections.deque(maxlen=300)
@@ -250,14 +276,14 @@ class TimeSeriesChart(ctk.CTkFrame):
 
         # Header bar
         top_bar = ctk.CTkFrame(self, fg_color="transparent", height=28)
-        top_bar.pack(fill=tk.X, padx=10, pady=(6, 2))
+        top_bar.pack(fill=tk.X, padx=12, pady=(8, 4))
         top_bar.pack_propagate(False)
 
         ctk.CTkLabel(
             top_bar,
-            text="Real-Time Telemetry Chart (15s Rolling Window)",
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            text_color="#E2E8F0",
+            text="REAL-TIME TELEMETRY WAVEFORM  ·  15s WINDOW",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
+            text_color="#FFFFFF",
         ).pack(side=tk.LEFT)
 
         self.unit_selector = ctk.CTkSegmentedButton(
@@ -265,18 +291,24 @@ class TimeSeriesChart(ctk.CTkFrame):
             values=["Pulse Width (µs)", "Angle (°)", "Counts (1-251)"],
             command=self._on_unit_change,
             height=24,
-            font=ctk.CTkFont(size=11),
+            fg_color="#141418",
+            selected_color="#27272A",
+            selected_hover_color="#3F3F46",
+            unselected_color="#0C0C0E",
+            unselected_hover_color="#18181C",
+            text_color="#F4F4F5",
+            font=ctk.CTkFont(family=FONT_UI, size=11),
         )
         self.unit_selector.set("Pulse Width (µs)")
         self.unit_selector.pack(side=tk.RIGHT)
 
         self.canvas = tk.Canvas(
             self,
-            bg="#0B1120",
+            bg="#000000",
             highlightthickness=1,
-            highlightbackground="#1E293B",
+            highlightbackground="#1F1F24",
         )
-        self.canvas.pack(fill=tk.BOTH, expand=True, padx=8, pady=(2, 8))
+        self.canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=(2, 10))
         self.canvas.bind("<Configure>", self._on_resize)
 
     def _on_resize(self, event: tk.Event) -> None:
@@ -315,7 +347,7 @@ class TimeSeriesChart(ctk.CTkFrame):
             return
         self.canvas.delete("all")
 
-        pad_left = 54.0
+        pad_left = 60.0
         pad_right = 16.0
         pad_top = 14.0
         pad_bottom = 22.0
@@ -339,34 +371,34 @@ class TimeSeriesChart(ctk.CTkFrame):
                 sy,
                 pad_left + plot_w,
                 sy,
-                fill="#334155" if is_center else "#1E293B",
+                fill="#27272A" if is_center else "#141418",
                 dash=() if is_center else (3, 3),
             )
             self.canvas.create_text(
-                pad_left - 6,
+                pad_left - 8,
                 sy,
                 anchor="e",
                 text=fmt.format(val),
-                fill="#94A3B8",
-                font=("Consolas", 8),
+                fill="#71717A",
+                font=(FONT_MONO, 8),
             )
 
-        # Legend
+        # Monochrome Legend
         self.canvas.create_text(
-            pad_left + 8,
+            pad_left + 10,
             pad_top + 2,
             anchor="nw",
-            text="━ X-Axis (East/West)",
-            fill="#38BDF8",
-            font=("Segoe UI", 9, "bold"),
+            text="━━ X-AXIS (WHITE)",
+            fill="#FFFFFF",
+            font=(FONT_UI, 9, "bold"),
         )
         self.canvas.create_text(
-            pad_left + 150,
+            pad_left + 140,
             pad_top + 2,
             anchor="nw",
-            text="━ Y-Axis (North/South)",
-            fill="#F59E0B",
-            font=("Segoe UI", 9, "bold"),
+            text="━━ Y-AXIS (GREY)",
+            fill="#71717A",
+            font=(FONT_UI, 9, "bold"),
         )
 
         if len(self._history) < 2:
@@ -374,8 +406,8 @@ class TimeSeriesChart(ctk.CTkFrame):
                 pad_left + plot_w * 0.5,
                 pad_top + plot_h * 0.5,
                 text="Waiting for [0xFF, pulso_x, pulso_y] telemetry stream...",
-                fill="#64748B",
-                font=("Segoe UI", 9),
+                fill="#52525B",
+                font=(FONT_UI, 10),
             )
             return
 
@@ -395,10 +427,10 @@ class TimeSeriesChart(ctk.CTkFrame):
             pts_x.extend([tx, sy_x])
             pts_y.extend([tx, sy_y])
 
-        if len(pts_x) >= 4:
-            self.canvas.create_line(*pts_x, fill="#38BDF8", width=2, smooth=False)
         if len(pts_y) >= 4:
-            self.canvas.create_line(*pts_y, fill="#F59E0B", width=2, smooth=False)
+            self.canvas.create_line(*pts_y, fill="#71717A", width=2, smooth=False)
+        if len(pts_x) >= 4:
+            self.canvas.create_line(*pts_x, fill="#FFFFFF", width=2, smooth=False)
 
         # Time axis ticks
         for sec_ago in (15, 10, 5, 0):
@@ -406,22 +438,28 @@ class TimeSeriesChart(ctk.CTkFrame):
             self.canvas.create_text(
                 tx,
                 h - 8,
-                text=f"-{sec_ago}s" if sec_ago > 0 else "Now",
-                fill="#64748B",
-                font=("Consolas", 8),
+                text=f"-{sec_ago}s" if sec_ago > 0 else "NOW",
+                fill="#52525B",
+                font=(FONT_MONO, 8),
             )
 
 
 class ProtocolInspector(ctk.CTkFrame):
     """
-    Displays live byte-level breakdown of `[0xFF, pulso_x, pulso_y]` frames,
-    packet rate (Hz), the latest PIC keyboard echo (`RX Echo`), and a serial log.
-    Uses a lightweight tk.Canvas banner for the 10 Hz byte boxes to avoid
+    Monochrome UART Protocol Inspector & Echo Monitor.
+    Uses a lightweight tk.Canvas banner for the 10 Hz byte cards to avoid
     CustomTkinter label relayout overhead.
     """
 
     def __init__(self, master: tk.Misc, **kwargs) -> None:
-        super().__init__(master, fg_color="#0F172A", corner_radius=8, **kwargs)
+        super().__init__(
+            master,
+            fg_color="#0C0C0E",
+            border_width=1,
+            border_color="#26262B",
+            corner_radius=10,
+            **kwargs,
+        )
         self.pack_propagate(False)
 
         self._packet_timestamps: Deque[float] = collections.deque(maxlen=25)
@@ -429,52 +467,62 @@ class ProtocolInspector(ctk.CTkFrame):
         self._last_echo_str: str = "—"
         self._last_b1_str: str = "0x7E (126) → 1500 µs"
         self._last_b2_str: str = "0x7E (126) → 1500 µs"
-        self._last_rate_str: str = "Rate: 0.0 Hz  |  Frames: 0  |  Echoes: 0"
+        self._last_rate_str: str = "RATE: 0.0 Hz   ·   FRAMES: 0   ·   ECHOES: 0"
 
-        # Top header + 3-Byte Packet Breakdown Canvas (zero layout overhead on 10 Hz updates)
+        # Top header + 3-Byte Packet Breakdown Canvas
         self.banner_canvas = tk.Canvas(
             self,
-            bg="#0F172A",
+            bg="#0C0C0E",
             height=68,
             highlightthickness=0,
         )
-        self.banner_canvas.pack(fill=tk.X, padx=10, pady=(6, 2))
+        self.banner_canvas.pack(fill=tk.X, padx=12, pady=(8, 2))
         self.banner_canvas.bind("<Configure>", lambda _e: self._draw_banner())
 
         # Log controls + Scrollable Textbox
         ctrl_row = ctk.CTkFrame(self, fg_color="transparent", height=24)
-        ctrl_row.pack(fill=tk.X, padx=10, pady=(2, 2))
+        ctrl_row.pack(fill=tk.X, padx=12, pady=(2, 2))
         ctrl_row.pack_propagate(False)
 
         ctk.CTkCheckBox(
             ctrl_row,
-            text="Log 10 Hz [0xFF, X, Y] Frames",
+            text="Stream 10 Hz [0xFF, X, Y] packets to log",
             variable=self._log_telemetry_var,
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=FONT_UI, size=11),
+            text_color="#A1A1AA",
+            fg_color="#FFFFFF",
+            checkmark_color="#000000",
+            hover_color="#D4D4D8",
+            border_color="#3F3F46",
             checkbox_width=16,
             checkbox_height=16,
         ).pack(side=tk.LEFT)
 
         ctk.CTkButton(
             ctrl_row,
-            text="Clear Log",
-            width=70,
+            text="Clear",
+            width=64,
             height=22,
-            fg_color="#334155",
-            hover_color="#475569",
-            font=ctk.CTkFont(size=11),
+            fg_color="#141418",
+            hover_color="#27272A",
+            border_width=1,
+            border_color="#26262B",
+            text_color="#D4D4D8",
+            font=ctk.CTkFont(family=FONT_UI, size=11),
             command=self.clear_log,
         ).pack(side=tk.RIGHT)
 
         self.log_box = ctk.CTkTextbox(
             self,
-            height=80,
-            fg_color="#0B1120",
-            text_color="#CBD5E1",
-            font=ctk.CTkFont(family="Consolas", size=11),
+            height=78,
+            fg_color="#000000",
+            border_width=1,
+            border_color="#1F1F24",
+            text_color="#D4D4D8",
+            font=ctk.CTkFont(family=FONT_MONO, size=11),
             activate_scrollbars=True,
         )
-        self.log_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=(2, 8))
+        self.log_box.pack(fill=tk.BOTH, expand=True, padx=12, pady=(2, 10))
         self.log_box.configure(state="disabled")
 
     def _draw_banner(self) -> None:
@@ -488,36 +536,36 @@ class ProtocolInspector(ctk.CTkFrame):
             2,
             10,
             anchor="w",
-            text="UART Protocol Inspector & Echo Monitor (9600 8N1)",
-            fill="#E2E8F0",
-            font=("Segoe UI", 10, "bold"),
+            text="UART PROTOCOL INSPECTOR  ·  9600 8N1",
+            fill="#FFFFFF",
+            font=(FONT_UI, 11, "bold"),
         )
         self._rate_item = self.banner_canvas.create_text(
             w - 2,
             10,
             anchor="e",
             text=self._last_rate_str,
-            fill="#38BDF8",
-            font=("Consolas", 9, "bold"),
+            fill="#A1A1AA",
+            font=(FONT_MONO, 9, "bold"),
         )
 
-        # 4 Byte-breakdown boxes
+        # 4 Monochrome Translucent-Style Byte Cards
         y0, y1 = 24, 64
         box_w = (w - 18) / 4.0
         specs = [
-            ("Byte 0 (Sync Header)", "0xFF (255)", "#F43F5E", "b0"),
-            ("Byte 1 (pulso_x)", self._last_b1_str, "#38BDF8", "b1"),
-            ("Byte 2 (pulso_y)", self._last_b2_str, "#F59E0B", "b2"),
-            ("Last PIC Echo (RX)", self._last_echo_str, "#34D399", "echo"),
+            ("BYTE 0 · SYNC HEADER", "0xFF (255)", "#FFFFFF", "b0"),
+            ("BYTE 1 · PULSO_X", self._last_b1_str, "#F4F4F5", "b1"),
+            ("BYTE 2 · PULSO_Y", self._last_b2_str, "#A1A1AA", "b2"),
+            ("LAST PIC ECHO (RX)", self._last_echo_str, "#FFFFFF", "echo"),
         ]
         for idx, (title, val, col, tag) in enumerate(specs):
             x0 = idx * (box_w + 6)
             x1 = x0 + box_w
             cx = 0.5 * (x0 + x1)
-            self.banner_canvas.create_rectangle(x0, y0, x1, y1, fill="#1E293B", outline="#334155")
-            self.banner_canvas.create_text(cx, y0 + 11, text=title, fill="#94A3B8", font=("Segoe UI", 8))
+            self.banner_canvas.create_rectangle(x0, y0, x1, y1, fill="#141418", outline="#26262B")
+            self.banner_canvas.create_text(cx, y0 + 11, text=title, fill="#71717A", font=(FONT_UI, 9, "bold"))
             self.banner_canvas.create_text(
-                cx, y0 + 28, text=val, fill=col, font=("Consolas", 9, "bold"), tags=(tag,)
+                cx, y0 + 28, text=val, fill=col, font=(FONT_MONO, 9, "bold"), tags=(tag,)
             )
 
     def on_telemetry(self, ev: TelemetryEvent, total_packets: int, total_echoes: int) -> None:
@@ -528,7 +576,7 @@ class ProtocolInspector(ctk.CTkFrame):
             if dt > 0.01:
                 rate = (len(self._packet_timestamps) - 1) / dt
 
-        self._last_rate_str = f"Rate: {rate:4.1f} Hz  |  Frames: {total_packets}  |  Echoes: {total_echoes}"
+        self._last_rate_str = f"RATE: {rate:4.1f} Hz   ·   FRAMES: {total_packets}   ·   ECHOES: {total_echoes}"
         self._last_b1_str = f"0x{ev.pulse_x:02X} ({ev.pulse_x:3d}) → {ev.us_x} µs"
         self._last_b2_str = f"0x{ev.pulse_y:02X} ({ev.pulse_y:3d}) → {ev.us_y} µs"
 
@@ -548,7 +596,7 @@ class ProtocolInspector(ctk.CTkFrame):
 
     def on_echo(self, ev: EchoEvent, total_packets: int, total_echoes: int) -> None:
         self._last_echo_str = f"'{ev.char}' (0x{ev.raw_byte:02X})"
-        self._last_rate_str = f"Frames: {total_packets}  |  Echoes: {total_echoes}"
+        self._last_rate_str = f"FRAMES: {total_packets}   ·   ECHOES: {total_echoes}"
         if hasattr(self, "_rate_item"):
             self.banner_canvas.itemconfigure("echo", text=self._last_echo_str)
             self.banner_canvas.itemconfigure(self._rate_item, text=self._last_rate_str)

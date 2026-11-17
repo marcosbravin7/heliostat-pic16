@@ -1,14 +1,10 @@
 """
 Main CustomTkinter GUI application for the PIC16F887 2-Axis Light Tracker.
 
-Features:
-- Real-time 9600 8N1 serial communication (or built-in PIC16F887 Simulator)
-- Mode switching ('1' Automatic LDR tracking, '2' Manual keyboard control)
-- On-screen & keyboard WASDC manual positioning with PIC echo confirmation
-- 3D STL kinematic viewer (`enclosure/*.stl`)
-- 2D Pan/Tilt compass radar & crosshair
-- Real-time scrolling time-series chart (µs / ° / counts)
-- Live [0xFF, pulso_x, pulso_y] byte-frame protocol inspector & serial log
+Monochrome Instrumentation Design:
+- Pure black (#000000) background with layered translucent-style dark grey panels (#0C0C0E / #121216)
+- Crisp 1px borders (#26262B) and high-contrast white (#FFFFFF) active states
+- Typography: Bahnschrift (DIN-1451 industrial UI) + Cascadia Mono (technical telemetry)
 """
 
 from __future__ import annotations
@@ -38,12 +34,11 @@ from serial_protocol import (
     TelemetryEvent,
     TxEvent,
 )
-from telemetry_widgets import ProtocolInspector, Radar2D, TimeSeriesChart
+from telemetry_widgets import FONT_MONO, FONT_UI, ProtocolInspector, Radar2D, TimeSeriesChart
 from viewer_3d import Enclosure3DViewer
 
 
 ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
 
 
 class LightTrackerApp(ctk.CTk):
@@ -55,9 +50,16 @@ class LightTrackerApp(ctk.CTk):
         super().__init__()
 
         self.title("PIC16F887 2-Axis Light Tracker — Serial Interpreter & Telemetry")
-        self.geometry("1340x840")
-        self.minsize(1100, 720)
-        self.configure(fg_color="#090D16")
+        self.geometry("1360x850")
+        self.minsize(1120, 720)
+        self.configure(fg_color="#000000")
+
+        # Subtle desktop translucency for modern glass feel
+        self._glass_var = tk.BooleanVar(value=True)
+        try:
+            self.attributes("-alpha", 0.96)
+        except Exception:
+            pass
 
         # Communication backends
         self.serial_mgr = SerialManager()
@@ -90,63 +92,90 @@ class LightTrackerApp(ctk.CTk):
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
         # 1. Top Connection & Mode Toolbar
-        toolbar = ctk.CTkFrame(self, fg_color="#0F172A", corner_radius=8, height=54)
-        toolbar.pack(fill=tk.X, padx=12, pady=(10, 6))
+        toolbar = ctk.CTkFrame(
+            self,
+            fg_color="#0C0C0E",
+            border_width=1,
+            border_color="#26262B",
+            corner_radius=10,
+            height=54,
+        )
+        toolbar.pack(fill=tk.X, padx=14, pady=(12, 8))
         toolbar.pack_propagate(False)
 
         title_lbl = ctk.CTkLabel(
             toolbar,
-            text="☀  2-Axis Light Tracker — PIC16F887",
-            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
-            text_color="#F8FAFC",
+            text="2-AXIS LIGHT TRACKER  ·  PIC16F887",
+            font=ctk.CTkFont(family=FONT_UI, size=14, weight="bold"),
+            text_color="#FFFFFF",
         )
-        title_lbl.pack(side=tk.LEFT, padx=(14, 18), pady=10)
+        title_lbl.pack(side=tk.LEFT, padx=(16, 18), pady=10)
 
         ctk.CTkLabel(
             toolbar,
-            text="COM Port:",
-            font=ctk.CTkFont(size=12),
-            text_color="#94A3B8",
-        ).pack(side=tk.LEFT, padx=(4, 6))
+            text="PORT",
+            font=ctk.CTkFont(family=FONT_UI, size=11, weight="bold"),
+            text_color="#71717A",
+        ).pack(side=tk.LEFT, padx=(2, 6))
 
         self.port_combo = ctk.CTkComboBox(
             toolbar,
             values=["No COM ports found"],
-            width=230,
+            width=210,
             height=30,
+            fg_color="#141418",
+            border_width=1,
+            border_color="#2A2A30",
+            button_color="#1F1F24",
+            button_hover_color="#2E2E36",
+            dropdown_fg_color="#141418",
+            dropdown_hover_color="#27272A",
+            dropdown_text_color="#F4F4F5",
+            text_color="#F4F4F5",
+            font=ctk.CTkFont(family=FONT_MONO, size=11),
+            dropdown_font=ctk.CTkFont(family=FONT_MONO, size=11),
             state="readonly",
         )
         self.port_combo.pack(side=tk.LEFT, padx=4)
 
         self.refresh_btn = ctk.CTkButton(
             toolbar,
-            text="↻ Refresh",
-            width=82,
+            text="↻",
+            width=34,
             height=30,
-            fg_color="#1E293B",
-            hover_color="#334155",
+            fg_color="#141418",
+            hover_color="#27272A",
+            border_width=1,
+            border_color="#2A2A30",
+            text_color="#D4D4D8",
+            font=ctk.CTkFont(family=FONT_UI, size=13, weight="bold"),
             command=self.refresh_ports,
         )
-        self.refresh_btn.pack(side=tk.LEFT, padx=4)
+        self.refresh_btn.pack(side=tk.LEFT, padx=3)
 
         self.connect_btn = ctk.CTkButton(
             toolbar,
             text="Connect (9600 8N1)",
-            width=145,
+            width=146,
             height=30,
-            fg_color="#0284C7",
-            hover_color="#0369A1",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#FFFFFF",
+            hover_color="#E4E4E7",
+            text_color="#000000",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
             command=self.toggle_serial_connection,
         )
-        self.connect_btn.pack(side=tk.LEFT, padx=(4, 16))
+        self.connect_btn.pack(side=tk.LEFT, padx=(4, 14))
 
         # Simulator controls
         self.sim_switch = ctk.CTkSwitch(
             toolbar,
-            text="PIC Simulator Mode",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            progress_color="#10B981",
+            text="Simulator",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
+            text_color="#D4D4D8",
+            fg_color="#27272A",
+            progress_color="#FFFFFF",
+            button_color="#71717A",
+            button_hover_color="#A1A1AA",
             command=self._on_toggle_simulator,
         )
         self.sim_switch.pack(side=tk.LEFT, padx=8)
@@ -154,51 +183,85 @@ class LightTrackerApp(ctk.CTk):
         self.orbit_chk_var = tk.BooleanVar(value=True)
         self.orbit_chk = ctk.CTkCheckBox(
             toolbar,
-            text="Auto-Orbit Virtual Light",
+            text="Orbit Light",
             variable=self.orbit_chk_var,
-            font=ctk.CTkFont(size=11),
-            checkbox_width=18,
-            checkbox_height=18,
+            font=ctk.CTkFont(family=FONT_UI, size=12),
+            text_color="#A1A1AA",
+            fg_color="#FFFFFF",
+            checkmark_color="#000000",
+            hover_color="#D4D4D8",
+            border_color="#3F3F46",
+            checkbox_width=16,
+            checkbox_height=16,
             command=self._on_toggle_orbit,
         )
         self.orbit_chk.pack(side=tk.LEFT, padx=8)
 
+        self.glass_chk = ctk.CTkCheckBox(
+            toolbar,
+            text="Glass Alpha",
+            variable=self._glass_var,
+            font=ctk.CTkFont(family=FONT_UI, size=12),
+            text_color="#A1A1AA",
+            fg_color="#FFFFFF",
+            checkmark_color="#000000",
+            hover_color="#D4D4D8",
+            border_color="#3F3F46",
+            checkbox_width=16,
+            checkbox_height=16,
+            command=self._on_toggle_glass,
+        )
+        self.glass_chk.pack(side=tk.LEFT, padx=8)
+
         self.status_badge = ctk.CTkLabel(
             toolbar,
-            text="● DISCONNECTED",
-            font=ctk.CTkFont(family="Consolas", size=12, weight="bold"),
-            text_color="#F87171",
+            text="○ DISCONNECTED",
+            font=ctk.CTkFont(family=FONT_MONO, size=11, weight="bold"),
+            text_color="#71717A",
         )
-        self.status_badge.pack(side=tk.RIGHT, padx=14)
+        self.status_badge.pack(side=tk.RIGHT, padx=16)
 
         # 2. Main Body Container (Left Sidebar + Right Visualization Workspace)
         body = ctk.CTkFrame(self, fg_color="transparent")
-        body.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
+        body.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 12))
 
         self._build_sidebar(body)
         self._build_workspace(body)
 
     def _build_sidebar(self, parent: ctk.CTkFrame) -> None:
-        sidebar = ctk.CTkFrame(parent, fg_color="#0F172A", corner_radius=8, width=320)
-        sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
+        sidebar = ctk.CTkFrame(
+            parent,
+            fg_color="#0C0C0E",
+            border_width=1,
+            border_color="#26262B",
+            corner_radius=10,
+            width=320,
+        )
+        sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         sidebar.pack_propagate(False)
 
         # --- Operating Mode Section ---
-        mode_card = ctk.CTkFrame(sidebar, fg_color="#1E293B", corner_radius=8)
+        mode_card = ctk.CTkFrame(
+            sidebar,
+            fg_color="#121216",
+            border_width=1,
+            border_color="#222228",
+            corner_radius=8,
+        )
         mode_card.pack(fill=tk.X, padx=12, pady=(12, 8))
 
         ctk.CTkLabel(
             mode_card,
-            text="OPERATING MODE (PIC16F887)",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#94A3B8",
+            text="OPERATING MODE",
+            font=ctk.CTkFont(family=FONT_UI, size=11, weight="bold"),
+            text_color="#71717A",
         ).pack(anchor="w", padx=12, pady=(8, 2))
 
         self.mode_badge = ctk.CTkLabel(
             mode_card,
-            text="AUTOMATIC MODE (LDR Tracking)",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            text_color="#34D399",
+            text="AUTOMATIC  ·  LDR TRACKING",
+            font=ctk.CTkFont(family=FONT_UI, size=13, weight="bold"),
+            text_color="#FFFFFF",
         )
         self.mode_badge.pack(anchor="w", padx=12, pady=(0, 8))
 
@@ -209,9 +272,12 @@ class LightTrackerApp(ctk.CTk):
             btn_row,
             text="[1] Auto Mode",
             height=34,
-            fg_color="#059669",
-            hover_color="#047857",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#FFFFFF",
+            hover_color="#E4E4E7",
+            text_color="#000000",
+            border_width=1,
+            border_color="#FFFFFF",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
             command=lambda: self.send_pic_command("1"),
         )
         self.btn_auto.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
@@ -221,23 +287,32 @@ class LightTrackerApp(ctk.CTk):
             btn_row,
             text="[2] Manual Mode",
             height=34,
-            fg_color="#334155",
-            hover_color="#475569",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#18181D",
+            hover_color="#27272A",
+            text_color="#A1A1AA",
+            border_width=1,
+            border_color="#2A2A30",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
             command=lambda: self.send_pic_command("2"),
         )
         self.btn_manual.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
         self._dpad_buttons["2"] = self.btn_manual
 
         # --- Manual D-Pad Control Section ---
-        dpad_card = ctk.CTkFrame(sidebar, fg_color="#1E293B", corner_radius=8)
+        dpad_card = ctk.CTkFrame(
+            sidebar,
+            fg_color="#121216",
+            border_width=1,
+            border_color="#222228",
+            corner_radius=8,
+        )
         dpad_card.pack(fill=tk.X, padx=12, pady=6)
 
         ctk.CTkLabel(
             dpad_card,
-            text="MANUAL CONTROL (Keys: W / A / S / D / C)",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#94A3B8",
+            text="MANUAL POSITIONING  ·  W / A / S / D / C",
+            font=ctk.CTkFont(family=FONT_UI, size=11, weight="bold"),
+            text_color="#71717A",
         ).pack(anchor="w", padx=12, pady=(8, 4))
 
         grid = ctk.CTkFrame(dpad_card, fg_color="transparent")
@@ -250,9 +325,12 @@ class LightTrackerApp(ctk.CTk):
             text="▲ W\nNorth (+Y)",
             width=84,
             height=46,
-            fg_color="#2563EB",
-            hover_color="#1D4ED8",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#18181D",
+            hover_color="#27272A",
+            border_width=1,
+            border_color="#2E2E36",
+            text_color="#F4F4F5",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
             command=lambda: self.send_pic_command("w"),
         )
         btn_w.grid(row=0, column=1, padx=4, pady=4)
@@ -263,9 +341,12 @@ class LightTrackerApp(ctk.CTk):
             text="◀ A\nWest (-X)",
             width=84,
             height=46,
-            fg_color="#2563EB",
-            hover_color="#1D4ED8",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#18181D",
+            hover_color="#27272A",
+            border_width=1,
+            border_color="#2E2E36",
+            text_color="#F4F4F5",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
             command=lambda: self.send_pic_command("a"),
         )
         btn_a.grid(row=1, column=0, padx=4, pady=4)
@@ -276,9 +357,12 @@ class LightTrackerApp(ctk.CTk):
             text="● C\nCenter 90°",
             width=84,
             height=46,
-            fg_color="#D97706",
-            hover_color="#B45309",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#24242C",
+            hover_color="#3F3F46",
+            border_width=1,
+            border_color="#52525B",
+            text_color="#FFFFFF",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
             command=lambda: self.send_pic_command("c"),
         )
         btn_c.grid(row=1, column=1, padx=4, pady=4)
@@ -289,9 +373,12 @@ class LightTrackerApp(ctk.CTk):
             text="D ▶\nEast (+X)",
             width=84,
             height=46,
-            fg_color="#2563EB",
-            hover_color="#1D4ED8",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#18181D",
+            hover_color="#27272A",
+            border_width=1,
+            border_color="#2E2E36",
+            text_color="#F4F4F5",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
             command=lambda: self.send_pic_command("d"),
         )
         btn_d.grid(row=1, column=2, padx=4, pady=4)
@@ -302,9 +389,12 @@ class LightTrackerApp(ctk.CTk):
             text="▼ S\nSouth (-Y)",
             width=84,
             height=46,
-            fg_color="#2563EB",
-            hover_color="#1D4ED8",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#18181D",
+            hover_color="#27272A",
+            border_width=1,
+            border_color="#2E2E36",
+            text_color="#F4F4F5",
+            font=ctk.CTkFont(family=FONT_UI, size=12, weight="bold"),
             command=lambda: self.send_pic_command("s"),
         )
         btn_s.grid(row=2, column=1, padx=4, pady=4)
@@ -312,70 +402,92 @@ class LightTrackerApp(ctk.CTk):
 
         ctk.CTkLabel(
             dpad_card,
-            text="Step: ±4 Timer1 counts (±32 µs / ±2.88°)",
-            font=ctk.CTkFont(size=10),
-            text_color="#64748B",
+            text="Step: ±4 counts (±32 µs / ±2.88°)",
+            font=ctk.CTkFont(family=FONT_MONO, size=10),
+            text_color="#52525B",
         ).pack(pady=(0, 8))
 
         # --- X-Axis Telemetry Card ---
-        x_card = ctk.CTkFrame(sidebar, fg_color="#1E293B", corner_radius=8)
+        x_card = ctk.CTkFrame(
+            sidebar,
+            fg_color="#121216",
+            border_width=1,
+            border_color="#222228",
+            corner_radius=8,
+        )
         x_card.pack(fill=tk.X, padx=12, pady=6)
 
         ctk.CTkLabel(
             x_card,
-            text="X-AXIS SERVO (RD0 — West ↔ East)",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#38BDF8",
+            text="X-AXIS SERVO  ·  RD0 (WEST ↔ EAST)",
+            font=ctk.CTkFont(family=FONT_UI, size=11, weight="bold"),
+            text_color="#A1A1AA",
         ).pack(anchor="w", padx=12, pady=(8, 2))
 
         self.x_deg_lbl = ctk.CTkLabel(
             x_card,
             text="90.0°  |  1500 µs",
-            font=ctk.CTkFont(family="Consolas", size=18, weight="bold"),
-            text_color="#F8FAFC",
+            font=ctk.CTkFont(family=FONT_MONO, size=17, weight="bold"),
+            text_color="#FFFFFF",
         )
         self.x_deg_lbl.pack(anchor="w", padx=12, pady=(0, 2))
 
         self.x_cnt_lbl = ctk.CTkLabel(
             x_card,
             text="Timer1 Setpoint: 126 / 251 (0x7E)",
-            font=ctk.CTkFont(family="Consolas", size=11),
-            text_color="#94A3B8",
+            font=ctk.CTkFont(family=FONT_MONO, size=10),
+            text_color="#71717A",
         )
         self.x_cnt_lbl.pack(anchor="w", padx=12, pady=(0, 6))
 
-        self.x_bar = ctk.CTkProgressBar(x_card, progress_color="#38BDF8", height=10)
+        self.x_bar = ctk.CTkProgressBar(
+            x_card,
+            fg_color="#1F1F26",
+            progress_color="#FFFFFF",
+            height=6,
+        )
         self.x_bar.pack(fill=tk.X, padx=12, pady=(0, 10))
         self.x_bar.set(0.5)
 
         # --- Y-Axis Telemetry Card ---
-        y_card = ctk.CTkFrame(sidebar, fg_color="#1E293B", corner_radius=8)
+        y_card = ctk.CTkFrame(
+            sidebar,
+            fg_color="#121216",
+            border_width=1,
+            border_color="#222228",
+            corner_radius=8,
+        )
         y_card.pack(fill=tk.X, padx=12, pady=6)
 
         ctk.CTkLabel(
             y_card,
-            text="Y-AXIS SERVO (RD1 — South ↔ North)",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#F59E0B",
+            text="Y-AXIS SERVO  ·  RD1 (SOUTH ↔ NORTH)",
+            font=ctk.CTkFont(family=FONT_UI, size=11, weight="bold"),
+            text_color="#71717A",
         ).pack(anchor="w", padx=12, pady=(8, 2))
 
         self.y_deg_lbl = ctk.CTkLabel(
             y_card,
             text="90.0°  |  1500 µs",
-            font=ctk.CTkFont(family="Consolas", size=18, weight="bold"),
-            text_color="#F8FAFC",
+            font=ctk.CTkFont(family=FONT_MONO, size=17, weight="bold"),
+            text_color="#D4D4D8",
         )
         self.y_deg_lbl.pack(anchor="w", padx=12, pady=(0, 2))
 
         self.y_cnt_lbl = ctk.CTkLabel(
             y_card,
             text="Timer1 Setpoint: 126 / 251 (0x7E)",
-            font=ctk.CTkFont(family="Consolas", size=11),
-            text_color="#94A3B8",
+            font=ctk.CTkFont(family=FONT_MONO, size=10),
+            text_color="#71717A",
         )
         self.y_cnt_lbl.pack(anchor="w", padx=12, pady=(0, 6))
 
-        self.y_bar = ctk.CTkProgressBar(y_card, progress_color="#F59E0B", height=10)
+        self.y_bar = ctk.CTkProgressBar(
+            y_card,
+            fg_color="#1F1F26",
+            progress_color="#71717A",
+            height=6,
+        )
         self.y_bar.pack(fill=tk.X, padx=12, pady=(0, 10))
         self.y_bar.set(0.5)
 
@@ -385,7 +497,7 @@ class LightTrackerApp(ctk.CTk):
 
         # Top row: 3D STL Viewer (left) + 2D Pan/Tilt Radar (right)
         top_pane = ctk.CTkFrame(workspace, fg_color="transparent")
-        top_pane.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
+        top_pane.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
         top_pane.grid_columnconfigure(0, weight=6)
         top_pane.grid_columnconfigure(1, weight=5)
         top_pane.grid_rowconfigure(0, weight=1)
@@ -398,7 +510,7 @@ class LightTrackerApp(ctk.CTk):
 
         # Middle row: Real-time scrolling chart
         self.chart = TimeSeriesChart(workspace, height=185)
-        self.chart.pack(fill=tk.X, pady=(0, 6))
+        self.chart.pack(fill=tk.X, pady=(0, 8))
 
         # Bottom row: UART Protocol Inspector & Echo Monitor
         self.inspector = ProtocolInspector(workspace, height=195)
@@ -443,23 +555,31 @@ class LightTrackerApp(ctk.CTk):
             except Exception:
                 pass
             self._flash_job = None
-        btn.configure(fg_color="#38BDF8")
-        self._flash_job = self.after(110, self._restore_button_colors)
+        btn.configure(fg_color="#FFFFFF", text_color="#000000")
+        self._flash_job = self.after(100, self._restore_button_colors)
 
     def _restore_button_colors(self) -> None:
         self._flash_job = None
         if self._closing:
             return
         if self.is_manual_mode:
-            self.btn_auto.configure(fg_color="#334155")
-            self.btn_manual.configure(fg_color="#2563EB")
+            self.btn_auto.configure(
+                fg_color="#18181D", text_color="#A1A1AA", border_color="#2A2A30"
+            )
+            self.btn_manual.configure(
+                fg_color="#FFFFFF", text_color="#000000", border_color="#FFFFFF"
+            )
         else:
-            self.btn_auto.configure(fg_color="#059669")
-            self.btn_manual.configure(fg_color="#334155")
+            self.btn_auto.configure(
+                fg_color="#FFFFFF", text_color="#000000", border_color="#FFFFFF"
+            )
+            self.btn_manual.configure(
+                fg_color="#18181D", text_color="#A1A1AA", border_color="#2A2A30"
+            )
 
         for k in ("w", "a", "s", "d"):
-            self._dpad_buttons[k].configure(fg_color="#2563EB")
-        self._dpad_buttons["c"].configure(fg_color="#D97706")
+            self._dpad_buttons[k].configure(fg_color="#18181D", text_color="#F4F4F5")
+        self._dpad_buttons["c"].configure(fg_color="#24242C", text_color="#FFFFFF")
 
     def send_pic_command(self, cmd: str) -> None:
         """Send a 1-byte command ('1', '2', 'w', 'a', 's', 'd', 'c') to the active backend."""
@@ -486,17 +606,23 @@ class LightTrackerApp(ctk.CTk):
         self.is_manual_mode = manual
         if manual:
             self.mode_badge.configure(
-                text="MANUAL MODE (Keyboard Control)", text_color="#60A5FA"
+                text="MANUAL  ·  KEYBOARD CONTROL", text_color="#E4E4E7"
             )
         else:
             self.mode_badge.configure(
-                text="AUTOMATIC MODE (LDR Tracking)", text_color="#34D399"
+                text="AUTOMATIC  ·  LDR TRACKING", text_color="#FFFFFF"
             )
         self._restore_button_colors()
 
     # ------------------------------------------------------------------
     # Connection & Simulator Handlers
     # ------------------------------------------------------------------
+    def _on_toggle_glass(self) -> None:
+        try:
+            self.attributes("-alpha", 0.95 if self._glass_var.get() else 1.0)
+        except Exception:
+            pass
+
     def refresh_ports(self) -> None:
         ports = self.serial_mgr.list_ports()
         self._port_map.clear()
@@ -515,7 +641,10 @@ class LightTrackerApp(ctk.CTk):
         if self.serial_mgr.is_connected:
             self.serial_mgr.disconnect()
             self.connect_btn.configure(
-                text="Connect (9600 8N1)", fg_color="#0284C7", hover_color="#0369A1"
+                text="Connect (9600 8N1)",
+                fg_color="#FFFFFF",
+                hover_color="#E4E4E7",
+                text_color="#000000",
             )
             return
 
@@ -531,7 +660,10 @@ class LightTrackerApp(ctk.CTk):
 
         if self.serial_mgr.connect(device, BAUD_RATE):
             self.connect_btn.configure(
-                text=f"Disconnect ({device})", fg_color="#DC2626", hover_color="#B91C1C"
+                text=f"Disconnect ({device})",
+                fg_color="#1F1F24",
+                hover_color="#2E2E36",
+                text_color="#FFFFFF",
             )
 
     def _on_toggle_simulator(self) -> None:
@@ -541,7 +673,10 @@ class LightTrackerApp(ctk.CTk):
             if self.serial_mgr.is_connected:
                 self.serial_mgr.disconnect()
                 self.connect_btn.configure(
-                    text="Connect (9600 8N1)", fg_color="#0284C7", hover_color="#0369A1"
+                    text="Connect (9600 8N1)",
+                    fg_color="#FFFFFF",
+                    hover_color="#E4E4E7",
+                    text_color="#000000",
                 )
             self.simulator.orbit_sun = bool(self.orbit_chk_var.get())
             self.simulator.start()
@@ -612,21 +747,23 @@ class LightTrackerApp(ctk.CTk):
         self.inspector.append_log(ev.message)
         if ev.connected:
             self.status_badge.configure(
-                text=f"● CONNECTED: {ev.port}",
-                text_color="#34D399",
+                text=f"● CONNECTED · {ev.port}",
+                text_color="#FFFFFF",
             )
         else:
             self.status_badge.configure(
-                text="● DISCONNECTED",
-                text_color="#F87171",
+                text="○ DISCONNECTED",
+                text_color="#71717A",
             )
             if not self.use_simulator:
                 self.connect_btn.configure(
-                    text="Connect (9600 8N1)", fg_color="#0284C7", hover_color="#0369A1"
+                    text="Connect (9600 8N1)",
+                    fg_color="#FFFFFF",
+                    hover_color="#E4E4E7",
+                    text_color="#000000",
                 )
 
     def _handle_telemetry_event(self, ev: TelemetryEvent) -> None:
-        # Only reconfigure CustomTkinter sidebar widgets when pulse_x or pulse_y actually changes
         if ev.pulse_x != self.pulse_x:
             self.pulse_x = ev.pulse_x
             self.x_deg_lbl.configure(text=f"{ev.deg_x:5.1f}°  |  {ev.us_x:4d} µs")
@@ -643,7 +780,6 @@ class LightTrackerApp(ctk.CTk):
             )
             self.y_bar.set((ev.pulse_y - PULSE_MIN) / float(PULSE_MAX - PULSE_MIN))
 
-        # Update 3D, 2D radar, and scrolling chart once per coalesced batch
         sun_pos: Optional[Tuple[float, float]] = (
             self.simulator.get_sun_position() if self.use_simulator else None
         )
